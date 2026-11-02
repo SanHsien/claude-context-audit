@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+# 工具產出的暫存報告與 deny 片段
+deny.json
+*.report.md
+state/
