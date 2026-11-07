@@ -1,19 +1,17 @@
 # 路線圖
 
 > 本 repo 後續工作的單一真相源。做完一項，就在同一個 commit 刪掉那一列；新工作只加在這裡。
-> 現況段的數字是 2026-11-03 依 `main` 查的快照，開工前先重查。
+> 現況段的數字是 2026-11-08 依 `main` `7c5fda7` 查的快照，開工前先重查。
 
 ## 現況
 
-從 ai-inbox 以 git-filter-repo 拆出的 Claude Code 脈絡稽核工具集（public，純 Python 標準庫，無第三方依賴）。本機 `python -m unittest discover -s tests` 共 208 項測試；CI（`.github/workflows/ci.yml`）在 windows-latest 與 ubuntu-latest 以 Python 3.11 執行。獨立後歷史已壓縮成單一 commit（2026-11-03，維護者決定），拆出前的歷史留在 ai-inbox。各工具的預設門檻多為作者取捨或借自外部專案，尚未在本 repo 量測。
+從 ai-inbox 以 git-filter-repo 拆出的 Claude Code 脈絡稽核工具集（public，純 Python 標準庫，無第三方依賴）。本機 `python -m unittest discover -s tests` 共 208 項測試（2026-11-08 本機以 Python 3.11.15 與 3.14.10 各跑一次，皆 `Ran 208 tests ... OK`）；CI（`.github/workflows/ci.yml`）在 windows-latest 與 ubuntu-latest 以 Python 3.11 與 3.14 矩陣執行（矩陣為本地改動，尚未推送驗證）。獨立後歷史已壓縮成單一 commit（2026-11-03，維護者決定），拆出前的歷史留在 ai-inbox。各工具的預設門檻多為作者取捨或借自外部專案，尚未在本 repo 量測。
 
 ## 近期：可以直接動手
 
 | 項目 | 驗收方式 | 建議執行者 | 證據 |
 | --- | --- | --- | --- |
-| 產出 `templates/token-budget-and-loop-breaker.md`（多 Agent 專案 Token 預算上限與死循環熔斷檢核範本） | 檔案存在、內容含預算上限與熔斷條件檢核項；筆記內的路徑連結可解析；測試全綠 | Claude Sonnet | `notes/2026-10-31-microsoft-tokeneconomizer-experience-driven-cost-control.md` 該任務仍未勾選且指向不存在的檔案（ai-inbox 任務 `T-20261031-45`） |
-| 補 `check_memory_index` 的規範文件 `docs/` | `docs/` 下有規範檔並從 README 連結；內容涵蓋門檻與校準方式 | Claude Sonnet | `tools/` 內該工具目前只有檔頭說明；對應筆記仍在 ai-inbox（連結見 README） |
-| CI 加跑較新的 Python | `ci.yml` 矩陣含較新版本且在兩個 OS 都綠 | Claude Sonnet | `.github/workflows/ci.yml` 目前只跑 3.11；本機另以 3.14 跑過一次全套測試 |
+| 確認 CI 矩陣（Python 3.11／3.14）在兩個 OS 都綠 | 本地 `ci.yml` 矩陣改動推送後，`gh run list --repo SanHsien/claude-context-audit` 最近一次 CI 的四個 job 都是 success；3.14 失敗就修相容問題或把 3.14 降為非必要並記理由 | Claude Sonnet | `.github/workflows/ci.yml` 的 `matrix.python-version`；本機 3.14 全套測試結果見現況 |
 
 ## 中期：等條件成立再做
 
@@ -27,6 +25,7 @@
 | 不做什麼 | 理由 | 什麼情況下重新考慮 |
 | --- | --- | --- |
 | 引入第三方依賴 | 維持純標準庫，免依賴更新與供應鏈面 | 出現標準庫無法合理達成的需求時 |
+| 產出 `templates/token-budget-and-loop-breaker.md`（Token 預算上限與死循環熔斷檢核範本） | 來源筆記的任務 `T-20261031-45` 已標「不做」：預算與熔斷的實際設定要看平台，靜態範本幫助有限；成本手冊 `docs/token-economizer-cost-control-spec.md`（第 6 節熔斷）與 `audit_agent_tool_pruning` 已涵蓋可驗證的部分。2026-11-08 沿用該決定 | 有特定平台的預算／熔斷設定項可對照官方文件逐項驗證，或手冊第 6 節被證實不夠用 |
 
 ## 維護方式
 

@@ -28,7 +28,7 @@ transcript (JSONL) ──┬─> audit_agent_tool_pruning ──────> �
 | `audit_agent_tool_pruning` | [`docs/token-economizer-cost-control-spec.md`](docs/token-economizer-cost-control-spec.md)、[筆記](notes/2026-10-31-microsoft-tokeneconomizer-experience-driven-cost-control.md) |
 | `audit_session_memory_compression` | [`docs/claude-code-cross-session-memory-evaluation-guide.md`](docs/claude-code-cross-session-memory-evaluation-guide.md)、[`templates/cross-session-memory-curation-spec.md`](templates/cross-session-memory-curation-spec.md)、[筆記](notes/2026-10-31-claude-code-cross-session-memory-claudemem-vs-claudemd.md) |
 | `verify_session_token_sentinel` | [`docs/long-chat-session-handoff-spec.md`](docs/long-chat-session-handoff-spec.md)、[`templates/session-handoff-brief-prompt.md`](templates/session-handoff-brief-prompt.md)、[筆記](notes/2026-11-02-littlehole-claude-saver-long-chat-session-handoff.md) |
-| `check_memory_index` | 對應筆記留在 ai-inbox：[`notes/2026-10-26-ai-shared-memory-template-team-collaboration.md`](https://github.com/SanHsien/ai-inbox/blob/main/notes/2026-10-26-ai-shared-memory-template-team-collaboration.md) |
+| `check_memory_index` | [`docs/memory-index-check-spec.md`](docs/memory-index-check-spec.md)；對應筆記留在 ai-inbox：[`notes/2026-10-26-ai-shared-memory-template-team-collaboration.md`](https://github.com/SanHsien/ai-inbox/blob/main/notes/2026-10-26-ai-shared-memory-template-team-collaboration.md) |
 
 ## 快速開始
 

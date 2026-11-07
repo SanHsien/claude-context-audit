@@ -17,7 +17,7 @@ Claude Code 本機 context 與 token 稽核工具。專案指令只放在本檔�
 
 1. 先讀對應的 `docs/` 規範與工具檔頭（判定語意與結束碼寫在那裡）。
 2. 改程式一定同步改測試；修 bug 先寫會失敗的測試。
-3. 全套測試（CI 用 Python 3.11；本機也用新版 Python 跑一次）：
+3. 全套測試（CI 矩陣跑 Python 3.11 與 3.14；本機至少跑其中一個）：
 
    ```
    python -m unittest discover -s tests
@@ -41,7 +41,7 @@ tests/       unittest；每支工具一份，加上 test_cli_help_encoding.py
 docs/        工具的規範文件（判定依據、取捨、已知極限）
 templates/   可複製到別的專案的範本
 notes/       從 ai-inbox 移入的來源筆記（保留原文，不當作現行規範）
-.github/workflows/ci.yml   windows-latest + ubuntu-latest，Python 3.11，unittest
+.github/workflows/ci.yml   windows-latest + ubuntu-latest × Python 3.11／3.14，unittest
 ROADMAP.md   後續工作
 ```
 
