@@ -1,3 +1,4 @@
+# fleet-waiver: multi-commit -- 2026-11-03 已壓成單一 root commit（7c5fda7），之後是正常開發的 commit；root 訊息沒寫 squash，所以 audit 認不出已壓縮（見 repo-fleet-ops WORKLOG 11-03）
 # fleet-waiver: freshness -- 純 Python 標準庫專案，沒有第三方套件宣告（無 requirements／pyproject 依賴）可以拿來比對下限；Actions 版本由下方 github-actions 的 Dependabot 追蹤
 version: 2
 updates:
