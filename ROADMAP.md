@@ -17,7 +17,6 @@
 
 | 項目 | 觸發條件 | 驗收方式 | 建議執行者 | 證據 |
 | --- | --- | --- | --- | --- |
-| 核對 Antigravity `agentapi` 介面說明 | 能取得廠商文件 | 對照文件更新兩份文件；查不到就移除該段落 | Claude Sonnet | `docs/long-chat-session-handoff-spec.md`、`templates/session-handoff-brief-prompt.md` 的 `agentapi` 說明只有 ai-inbox 內部紀錄佐證 |
 | 同步筆記內的跨筆記連結 | ai-inbox 對應筆記的任務表或狀態變動 | 三篇移入筆記指向的 ai-inbox 網址仍符合現況 | Claude Sonnet | 三篇移入筆記的連結已改為 ai-inbox 網址，但不會自動同步 |
 
 ## 刻意不做

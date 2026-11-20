@@ -21,7 +21,8 @@
 | 原作 hook 的演算法（讀尾端 2MB、三欄加總、級距、狀態檔） | 已查證 | 原作固定 commit 的 `hooks/long-chat-reminder.js` 全文 |
 | 原作 handoff 流程（改名加 1、先確認再封存、CLI 降級） | 已查證（僅限原作 skill 內容） | 原作 `skills/handoff/SKILL.md` |
 | Claude 桌面版有 `start_session`／`get_session`／`archive_session` 這組工具及參數 | **未驗證** | 官方文件（hooks、desktop、sessions、costs、prompt-caching、context-window、model-config）全文搜尋沒有這些名稱；只在原作 skill 出現。官方只寫到「可以請 Claude 重新命名或封存其他 session」與側欄選單 Archive |
-| Antigravity 的 `agentapi new-conversation`、`UpdateConversationAnnotations` | **未驗證（僅有 ai-inbox 內部紀錄）** | ai-inbox [`docs/agent-dispatch.md`](https://github.com/SanHsien/ai-inbox/blob/main/docs/agent-dispatch.md) 第 8、10、20、22 行；未對照廠商官方文件 |
+| Antigravity 的 `agentapi new-conversation` | 已查證 | 官方 [Sidecars 文件](https://antigravity.google/docs/sidecars) 的 `agentapi` 章節與範例，及本機 `language_server.exe agentapi --help`（2026-11-20 查）；`--help` 列出的子指令只有 `get-conversation-metadata`、`new-conversation`、`send-message` |
+| Antigravity 封存自己的對話 | **官方無公開介面** | 官方文件、changelog 與本機 `--help` 都沒有封存或改註記的指令；ai-inbox 用的 Connect-RPC 是未公開的內部方法，不列為本規格的做法 |
 | 「150k tokens 起算、每 50k 提示」的合理性 | **無外部依據** | 這是原作的預設值，沒有找到來源或量測；見第 1.3 節 |
 | Codex 的新會話／封存介面 | **未驗證** | 本文不保證，只提供貼上式降級 |
 | transcript JSONL 內 `message.usage` 的欄位格式 | 未見官方文件 | 官方只說 `transcript_path` 指向對話 JSON；欄位格式以原作程式為準，工具遇到格式不符會明確失敗 |
@@ -235,7 +236,7 @@ $ python tools/verify_session_token_sentinel.py classify "新增欄位後再修�
 | 環境 | get_title | start_new | archive_self | 狀態 |
 | :--- | :--- | :--- | :--- | :--- |
 | Claude 桌面版（Code 分頁） | `get_session(session:"self")` | `start_session(context:"fresh", title, brief)`；要跳按鈕用 `initiation:"offer"` | `archive_session(session:"self")` | 工具名稱與參數**僅見於原作 skill，官方文件查無，未驗證**。官方有文件的只有：請 Claude 封存 session、側欄選單 **Archive** |
-| Antigravity | 由代理程式自己的對話識別（環境變數）取得，細節見 ai-inbox 的 [`docs/agent-dispatch.md`](https://github.com/SanHsien/ai-inbox/blob/main/docs/agent-dispatch.md) | `language_server.exe agentapi new-conversation`（ai-inbox 紀錄：建立頂層新對話） | Connect-RPC `UpdateConversationAnnotations`，`annotations.archived=true`，並帶 `mergeAnnotations=true` 保留標題 | **未對照廠商文件**，僅有 ai-inbox 內部紀錄 |
+| Antigravity | 由代理程式自己的對話識別（環境變數）取得，細節見 ai-inbox 的 [`docs/agent-dispatch.md`](https://github.com/SanHsien/ai-inbox/blob/main/docs/agent-dispatch.md) | `language_server.exe agentapi new-conversation <prompt>`（官方 Sidecars 文件有記載） | 官方無公開介面；降級為請使用者在 App 裡手動封存 | start_new 已查證；archive_self 無官方介面 |
 | Claude Code 純終端機 | `/rename` 可改名（官方 costs 頁） | 無對應工具；官方做法是 `/clear` 之後用 `/resume` 回到舊對話 | 無封存概念 | 降級為輸出 brief 文字，請使用者貼到新對話 |
 | Codex | 未驗證 | 未驗證 | 未驗證 | 降級為輸出 brief 文字 |
 

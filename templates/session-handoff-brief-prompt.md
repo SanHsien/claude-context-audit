@@ -19,7 +19,7 @@
 | 環境 | 自動建立新對話 | 自動封存舊對話 | 說明 |
 | :--- | :--- | :--- | :--- |
 | Claude 桌面版（Code 分頁） | 原作 skill 使用 `start_session` | 原作 skill 使用 `archive_session` | 這兩個工具名稱**官方文件查無，未驗證**，只出現在原作；工具清單裡沒有就走降級 |
-| Antigravity | ai-inbox 紀錄有 `agentapi new-conversation` | ai-inbox 紀錄有 `UpdateConversationAnnotations` | **未對照廠商文件**，細節見 ai-inbox 的 [`docs/agent-dispatch.md`](https://github.com/SanHsien/ai-inbox/blob/main/docs/agent-dispatch.md)；不確定就走降級 |
+| Antigravity | `agentapi new-conversation <prompt>`（官方 [Sidecars 文件](https://antigravity.google/docs/sidecars)有記載） | 官方無公開介面 | 封存走降級：請使用者在 App 裡手動封存 |
 | Claude Code 純終端機 | 無 | 無 | 官方做法是改名後 `/clear`，之後 `/resume` 回舊對話 |
 | Codex | 未驗證 | 未驗證 | 一律走降級（貼上） |
 
