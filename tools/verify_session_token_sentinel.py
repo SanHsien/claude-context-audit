@@ -130,6 +130,10 @@ def scan_usage(data: bytes, truncated: bool) -> ScanResult:
         message = obj.get("message")
         if not isinstance(message, dict) or "usage" not in message:
             continue
+        # API 錯誤或中斷時 Claude Code 會寫 model 為 <synthetic> 的合成訊息，usage 全 0；
+        # 舊版把子 agent 訊息（isSidechain）寫進同一個檔，那是子 agent 的上下文。兩者都不是主對話的讀數。
+        if message.get("model") == "<synthetic>" or obj.get("isSidechain") is True:
+            continue
         tokens = _usage_tokens(message["usage"])
         if tokens is None:
             bad_usage += 1

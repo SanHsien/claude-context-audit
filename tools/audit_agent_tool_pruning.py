@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -122,6 +123,15 @@ def check_unique(paths: list[Path]) -> list[Path]:
         if key in seen:
             raise InputError(f"重複的 transcript：{p}（與 {seen[key]} 是同一個檔案），重複會灌水證據")
         seen[key] = p
+    digests: dict[str, Path] = {}
+    for p in paths:
+        try:
+            digest = hashlib.sha256(p.read_bytes()).hexdigest()
+        except OSError:
+            continue  # 讀不到的檔由 parse_transcript 回報
+        if digest in digests:
+            raise InputError(f"{p} 與 {digests[digest]} 內容完全相同（副本），重複會灌水證據")
+        digests[digest] = p
     for p in paths:
         for sub in subagent_files(p):
             key = sub.resolve()
@@ -160,7 +170,8 @@ def parse_transcript(path: Path) -> dict:
     input_chars: dict[str, int] = {}
     entries = 0
 
-    for lineno, line in enumerate(text.splitlines(), start=1):
+    # 只在 \n 切行：splitlines() 也會在 U+2028／U+2029／U+0085 切開，JSON.stringify 不跳脫它們。
+    for lineno, line in enumerate(text.split("\n"), start=1):
         if not line.strip():
             continue
         where = f"{path}:{lineno}"

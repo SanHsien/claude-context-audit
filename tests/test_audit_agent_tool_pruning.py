@@ -589,5 +589,26 @@ class DocConsistencyTest(unittest.TestCase):
         self.assertTrue(found, "文件缺少 permissions.deny 範例")
 
 
+class AdversarialReview(BaseTest):
+    """2026-11-21 對抗覆核（REVIEW.md P1–P2）。"""
+
+    def test_unicode_line_separators_inside_json_strings(self):
+        # P1：U+2028／U+2029／U+0085 在 JSON 字串裡合法（JSON.stringify 不跳脫），不能當成換行切開。
+        for sep in (" ", " ", "\x85"):
+            with self.subTest(sep=repr(sep)):
+                s = self.parse([user(f"請改{sep}這個檔")] + assistant("m1", ("t1", "Bash", {"c": f"a{sep}b"})))
+                self.assertEqual((s["prompts"], s["calls"]), (1, {"Bash": 1}))
+
+    def test_byte_identical_copies_are_rejected(self):
+        # P2：同一份 transcript 複製成不同檔名，會把 session 數灌到 fallback 門檻。
+        entries = session(3, ["Bash"])
+        p1 = self.w.transcript(entries)
+        p2 = self.w.transcript(entries)
+        code, _, err = run_cli(p1, p2)
+        self.assertEqual(code, 2)
+        self.assertIn("內容完全相同", err)
+        self.assertEqual(run_cli(p1, self.w.transcript(session(3, ["Read"])))[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

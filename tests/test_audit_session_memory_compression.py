@@ -590,5 +590,64 @@ class TemplateExamplesHonorOwnStandards(Base):
         self.assertEqual(code, 0)
 
 
+class AdversarialReview(Base):
+    """2026-11-21 對抗覆核（REVIEW.md K1–K3）。"""
+
+    def test_unicode_line_separators_inside_json_strings(self):
+        # K1：JSON.stringify 不跳脫 U+2028／U+2029／U+0085；它們在 JSON 字串裡合法，不能當成換行切開。
+        for sep in (" ", " ", "\x85", "\x0c"):
+            with self.subTest(sep=repr(sep)):
+                rec = {"type": "user", "message": {"role": "user", "content": f"看 src/a.py{sep}ENOENT"}}
+                raw = (json.dumps(rec, ensure_ascii=False) + "\n").encode("utf-8")
+                segments = a.load_transcript(self.env.transcript(raw=raw))
+                text = "\n".join(t for _, t in segments)
+                self.assertIn("src/a.py", a.extract_paths(text))
+                self.assertIn("enoent", a.extract_errors(text))
+
+    def test_many_decisions_and_memory_lines_stay_fast(self):
+        # K2：每個決策句都把每一行記憶重新切詞元，是 D×U 次切詞；未保留路徑也逐一重算整份 transcript。
+        import time
+        sentences = "。".join(f"因為第{i}號模組的設定檔錯誤所以改用備援方案{i}" for i in range(1500))
+        segments = [("text", sentences), ("tool", " ".join(f"src/m{i}.py" for i in range(300)))]
+        memory = "\n".join(f"- 因為第{i}號模組設定錯誤改用備援{i}，見 lib/x{i}.py" for i in range(1500))
+        started = time.perf_counter()
+        a.audit(segments, memory, max_loss=1, decision_overlap=0.5, max_filler=0,
+                max_unsupported=10**6, min_facts=1)
+        self.assertLess(time.perf_counter() - started, 30.0)  # 修前同規模約 40 秒
+
+    def test_reason_in_another_bullet_is_not_retained(self):
+        # K4：沒有空行的條列清單整份被當成一段，做法與原因分散在不同條目也算「保留因果」（假綠）。
+        dec = [f"因為快取設定錯誤導致登入流程失敗，所以改用新的權杖更新機制處理第{i}項" for i in range(4)]
+        segs = [("text", "。".join(dec)), ("tool", "src/a.py ENOENT Ran 3 tests")]
+        kw = dict(max_loss=0.4, decision_overlap=0.5, max_filler=0, max_unsupported=0, min_facts=1)
+        split = "- 改用新的權杖更新機制處理\n- 快取設定錯誤導致登入流程失敗\n- src/a.py ENOENT Ran 3 tests\n"
+        rep = a.audit(segs, split, **kw)
+        self.assertEqual(rep["categories"]["decisions"]["lost"], 4)
+        self.assertEqual(rep["verdict"], "FAIL")
+        # 同一個條目換行續寫仍算同一段
+        wrapped = "- 因為快取設定錯誤導致登入流程失敗，\n  所以改用新的權杖更新機制處理\n- src/a.py ENOENT Ran 3 tests\n"
+        self.assertEqual(a.audit(segs, wrapped, **kw)["categories"]["decisions"]["lost"], 0)
+
+    def test_leading_context_must_be_in_the_same_paragraph(self):
+        # K4（mutation 補洞）：第一個標記前的背景段可由所在段落涵蓋，但不能完全不見或只在別段。
+        sent = "UnicodeDecodeError 出現在 src/reader.py，因為 Windows 用 CRLF 讓正則失效，所以改用 splitlines"
+        rule = "- 因為 Windows 用 CRLF 讓正則失效，所以改用 splitlines\n"
+        self.assertGreaterEqual(a.best_overlap(sent, a.memory_units("- src/reader.py UnicodeDecodeError\n" + rule)), 0.5)
+        self.assertLess(a.best_overlap(sent, a.memory_units(rule)), 0.5)
+        self.assertLess(a.best_overlap(sent, a.memory_units("- src/reader.py UnicodeDecodeError\n\n" + rule)), 0.5)
+
+    def test_output_cannot_overwrite_inputs(self):
+        # K3：--output 指到 transcript 或記憶檔會把輸入蓋掉；工具對輸入唯讀。
+        t = self.env.transcript()
+        m = self.env.memory(GOOD_MEMORY)
+        for target in (t, m):
+            with self.subTest(target=target.name):
+                before = target.read_bytes()
+                code, _, err = run("--transcript", t, "--memory", m, "--output", target)
+                self.assertEqual(code, 2)
+                self.assertIn("--output", err)
+                self.assertEqual(target.read_bytes(), before)
+
+
 if __name__ == "__main__":
     unittest.main()

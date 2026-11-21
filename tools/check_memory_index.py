@@ -21,10 +21,12 @@ tools/check_memory_index.py
     WARN   name-mismatch   frontmatter 的 name 與檔名不同
     WARN   unknown-type    type 不是 user／feedback／project／reference／insight（可用 --types 改）
     WARN   dead-wikilink   [[name]] 指向不存在的記憶（程式碼區塊與行內程式碼內的不算）
+    WARN   duplicate-key   frontmatter 同一個頂層鍵出現多次（只有最後一個生效）
+索引行裡圍欄程式碼與行內程式碼內的連結不算指標（範例不會被當成索引）。
 
 用法：
     python tools/check_memory_index.py <記憶資料夾> [--ignore GLOB ...] [--no-default-ignore] [--skip-frontmatter GLOB ...] [--json] [--strict]
-結束碼：0 通過；1 有 ERROR（或 --strict 且有 WARN）；2 參數或資料夾錯誤。
+結束碼：0 通過；1 有 ERROR（或 --strict 且有 WARN）；2 參數或資料夾錯誤、或讀取時發生 OSError（例如權限不足）。
 只使用 Python 標準函式庫。
 """
 
@@ -43,10 +45,11 @@ DEFAULT_TYPES = ("user", "feedback", "project", "reference", "insight")
 DEFAULT_IGNORE = ("daily-log-*.md",)
 REQUIRED_FIELDS = ("name", "description", "type")
 
-_ENTRY = re.compile(r"\[([^\]\n]*)\]\(([^)\n]+)\)")
+# 標籤不收 [：一行大量 [ 時不會從每個 [ 重掃整行（平方時間）；巢狀方括號的標籤本來就配不到。
+_ENTRY = re.compile(r"\[([^\[\]\n]*)\]\(([^)\n]+)\)")
 _BULLET = re.compile(r"^\s*[-*]\s+")
-_FENCE = re.compile(r"^\s*(```|~~~)")
-_INLINE_CODE = re.compile(r"`[^`\n]*`")
+_FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+_BACKTICK_RUN = re.compile(r"`+")
 _WIKILINK = re.compile(r"\[\[([^\[\]\n]+)\]\]")
 _KEY = re.compile(r"^([A-Za-z_][\w-]*):[ \t]*(.*)$")
 _INDENT_TYPE = re.compile(r"^[ \t]+type:[ \t]*(.*)$")
@@ -71,8 +74,14 @@ class Finding:
         return f"{self.level:5} {self.code:14} {loc}  {self.msg}"
 
 
-def parse_frontmatter(text: str) -> dict | None:
-    """回傳 {欄位: 值}（metadata 底下的 type 也算 type）；沒有 frontmatter 或沒收尾回 None。"""
+def _clean_value(raw: str) -> str:
+    return raw.strip().strip("\"'").strip()
+
+
+def parse_frontmatter(text: str, duplicates: list[str] | None = None) -> dict | None:
+    """回傳 {欄位: 值}（metadata: 底下的 type 也算 type）；沒有 frontmatter 或沒收尾回 None。
+
+    duplicates 給 list 時，重複出現的頂層鍵會依序加進去（值以最後一個為準）。"""
     lines = text.lstrip("﻿").split("\n")
     if not lines or lines[0].strip() != "---":
         return None
@@ -82,28 +91,54 @@ def parse_frontmatter(text: str) -> dict | None:
     else:
         return None
     fields: dict[str, str] = {}
+    parent = None
     for line in lines[1:end]:
         m = _KEY.match(line)
         if m:
-            fields[m.group(1)] = m.group(2).strip().strip("\"'")
+            key = m.group(1)
+            if key in fields and duplicates is not None:
+                duplicates.append(key)
+            fields[key] = _clean_value(m.group(2))
+            parent = key if not fields[key] else None
             continue
         m = _INDENT_TYPE.match(line)
-        if m and "type" not in fields:
-            fields["type"] = m.group(1).strip().strip("\"'")
+        if m and parent == "metadata" and not fields.get("type"):
+            fields["type"] = _clean_value(m.group(1))
     return fields
 
 
+def _strip_inline(line: str) -> str:
+    """去掉成對、長度相同的反引號 run 之間的內容（`x`、``x``）；落單的反引號照原樣留著。"""
+    runs = list(_BACKTICK_RUN.finditer(line))
+    out, cursor, i = [], 0, 0
+    while i < len(runs):
+        size = len(runs[i].group())
+        close = next((j for j in range(i + 1, len(runs)) if len(runs[j].group()) == size), None)
+        if close is None:
+            i += 1
+            continue
+        out.append(line[cursor:runs[i].start()])
+        cursor, i = runs[close].end(), close + 1
+    out.append(line[cursor:])
+    return "".join(out)
+
+
 def strip_code(text: str) -> str:
-    """去掉圍欄程式碼區塊與行內程式碼，避免把範例裡的 [[x]] 當成連結。"""
-    out, in_fence = [], False
+    """去掉圍欄程式碼區塊與行內程式碼，避免把範例裡的 [[x]]、[x](x.md) 當成連結。行數不變。
+
+    圍欄只被同字元、長度不短於開頭、後面沒有其他字的行關閉（~~~ 關不掉 ```）。"""
+    out, fence = [], None
     for line in text.split("\n"):
-        if _FENCE.match(line):
-            in_fence = not in_fence
+        m = _FENCE.match(line)
+        if fence is None and m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+            fence = m.group(1)
             out.append("")
-        elif in_fence:
+        elif fence is not None:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+                fence = None
             out.append("")
         else:
-            out.append(_INLINE_CODE.sub("", line))
+            out.append(_strip_inline(line))
     return "\n".join(out)
 
 
@@ -117,14 +152,16 @@ def _matches(name: str, globs: list[str]) -> bool:
 
 
 def _scan_index(
-    root: Path, index_file: str, text: str, indexed: dict[str, str], findings: list[Finding], stats: dict, max_line_chars: int
+    root: Path, index_file: str, text: str, indexed: dict[str, str], findings: list[Finding], stats: dict, max_line_chars: int,
+    listings: dict[Path, set[str]] | None = None,
 ) -> list[str]:
     """解析一份索引（主索引或子索引），把指標記進 indexed；回傳它指到的頂層子索引檔名。"""
+    listings = {} if listings is None else listings
     sub_targets: list[str] = []
-    for lineno, line in enumerate(text.split("\n"), 1):
-        if not _BULLET.match(line):
+    for lineno, (line, prose) in enumerate(zip(text.split("\n"), strip_code(text).split("\n")), 1):
+        if not _BULLET.match(prose):
             continue
-        entries = [e for e in _ENTRY.findall(line) if not re.match(r"^[a-z][a-z0-9+.-]+:", e[1].strip(), re.I)]
+        entries = [e for e in _ENTRY.findall(prose) if not re.match(r"^[a-z][a-z0-9+.-]+:", e[1].strip(), re.I)]
         entries = [e for e in entries if not e[1].strip().startswith("#")]
         if not entries:
             continue
@@ -146,7 +183,9 @@ def _scan_index(
                 continue
             indexed[target] = f"{index_file}:{lineno}"
             parent = root.joinpath(*parts[:-1])
-            names = {q.name for q in parent.iterdir() if q.is_file()} if parent.is_dir() else set()
+            if parent not in listings:  # 每個資料夾只列一次；逐條重列是平方時間
+                listings[parent] = {q.name for q in parent.iterdir() if q.is_file()} if parent.is_dir() else set()
+            names = listings[parent]
             exists = parts[-1] in names
             case_hit = next((n for n in names if n.lower() == parts[-1].lower()), None) if not exists else None
             if exists and len(parts) == 1 and _matches(parts[0], [SUB_INDEX_GLOB]):
@@ -189,9 +228,10 @@ def check(
     indexed: dict[str, str] = {}
     queue: list[tuple[str, str]] = [(INDEX_NAME, index_text)]
     followed = {INDEX_NAME}
+    listings: dict[Path, set[str]] = {}
     while queue:
         index_file, text = queue.pop(0)
-        sub_targets = _scan_index(root, index_file, text, indexed, findings, stats, max_line_chars)
+        sub_targets = _scan_index(root, index_file, text, indexed, findings, stats, max_line_chars, listings)
         for target in sub_targets:
             if target in followed:
                 continue
@@ -224,7 +264,10 @@ def check(
             findings.append(Finding("ERROR", "unreadable", name, 0, f"讀取失敗：{type(e).__name__}"))
             continue
         if name != INDEX_NAME and not _matches(name, [SUB_INDEX_GLOB, *skip_frontmatter]):
-            fm = parse_frontmatter(text)
+            dup_keys: list[str] = []
+            fm = parse_frontmatter(text, dup_keys)
+            for key in dict.fromkeys(dup_keys):
+                findings.append(Finding("WARN", "duplicate-key", name, 1, f"frontmatter 的 {key} 出現多次，只有最後一個生效"))
             if fm is None:
                 findings.append(Finding("ERROR", "no-frontmatter", name, 1, "缺 frontmatter（或沒有結尾的 ---）"))
             else:
@@ -264,14 +307,18 @@ def main(argv: list[str] | None = None) -> int:
     if not root.is_dir():
         print(f"錯誤：不是資料夾：{root}", file=sys.stderr)
         return 2
-    findings, stats = check(
-        root,
-        ([] if args.no_default_ignore else list(DEFAULT_IGNORE)) + args.ignore,
-        args.skip_frontmatter,
-        args.max_entries,
-        args.max_line_chars,
-        tuple(t.strip() for t in args.types.split(",") if t.strip()),
-    )
+    try:
+        findings, stats = check(
+            root,
+            ([] if args.no_default_ignore else list(DEFAULT_IGNORE)) + args.ignore,
+            args.skip_frontmatter,
+            args.max_entries,
+            args.max_line_chars,
+            tuple(t.strip() for t in args.types.split(",") if t.strip()),
+        )
+    except OSError as exc:
+        print(f"錯誤：讀取記憶資料夾失敗：{exc}", file=sys.stderr)
+        return 2
     errors = sum(f.level == "ERROR" for f in findings)
     warns = sum(f.level == "WARN" for f in findings)
     by_code: dict[str, int] = {}

@@ -277,6 +277,10 @@ $ python tools/verify_session_token_sentinel.py title "SEO 調整"      -> SEO �
 3. 第 3.2 節桌面版與 Antigravity 的工具介面未對照官方文件；介面改版時以官方為準。
 4. 壓縮／清空後的級距重設不在本文範圍（第 2.4 節）。
 5. 語意判定的最終品質取決於 Claude 對提示的遵循，hook 無法保證；啟發式規則只能做回歸測試。
+6. **與原作不同（2026-11-21 起）**：反向找 usage 時跳過 `message.model` 為 `<synthetic>` 的合成訊息與 `isSidechain: true` 的子 agent 訊息。合成訊息是 Claude Code 在 API 錯誤或使用者中斷時寫入的，usage 全為 0；本機最近 300 份 transcript 有 58 份含這種訊息（2026-11-21 唯讀統計）。不跳過的話，最後一筆是合成訊息時讀數為 0，正好在「上下文過長而出錯」這種最需要提醒的時候判成 silent。
+7. 讀數不含上一輪的 `output_tokens`，會略少於下一輪實際送出的上下文。
+8. 末端 2MB 內沒有任何完整的 usage 行（例如最後一行是超過 2MB 的工具輸出或圖片）時是 `window_exhausted`，hook 預設略過、`--strict` 才 exit 1。
+9. 狀態檔預設放系統暫存資料夾，檔名由 `session_id` 決定；多人共用的機器上，別人能預先放一個高級距的狀態檔讓你收不到 notify（仍有 inject）。共用機器請用 `--state-dir` 指到只有自己可寫的資料夾。
 
 ---
 

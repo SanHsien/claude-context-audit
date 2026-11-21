@@ -458,5 +458,38 @@ class TemplateExampleTests(unittest.TestCase):
             self.assertEqual(S.next_title(old), new, old)
 
 
+class AdversarialReview(unittest.TestCase):
+    """2026-11-21 對抗覆核（REVIEW.md T1）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "t.jsonl"
+
+    def synthetic(self):
+        # Claude Code 在 API 錯誤、中斷時寫入的合成訊息：model 是 <synthetic>，usage 全 0。
+        return json.dumps({"type": "assistant", "message": {"model": "<synthetic>", "role": "assistant", "usage": {
+            "input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}})
+
+    def test_synthetic_zero_usage_is_skipped(self):
+        write_lines(self.path, [usage_line(10, 190000, 0), self.synthetic()])
+        r = S.measure_file(self.path)
+        self.assertEqual((r.status, r.tokens), ("ok", 190010))
+        write_lines(self.path, [self.synthetic()])
+        self.assertEqual(S.measure_file(self.path).status, "no_usage")
+
+    def test_sidechain_usage_is_skipped(self):
+        # 舊版 Claude Code 把子 agent 訊息寫在同一個檔（isSidechain: true），它的 usage 是子 agent 的上下文。
+        write_lines(self.path, [usage_line(10, 190000, 0), usage_line(5, 1000, 0, isSidechain=True)])
+        self.assertEqual(S.measure_file(self.path).tokens, 190010)
+
+    def test_hook_still_notifies_after_synthetic_message(self):
+        write_lines(self.path, [usage_line(10, 190000, 0), self.synthetic()])
+        stdin = json.dumps({"transcript_path": str(self.path), "session_id": "s1"}).encode("utf-8")
+        code, out, _ = S.run_hook(stdin, 150000, 50000, Path(self.tmp.name), False)
+        self.assertEqual(code, 0)
+        self.assertIn("systemMessage", json.loads(out))
+
+
 if __name__ == "__main__":
     unittest.main()

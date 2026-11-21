@@ -283,5 +283,92 @@ class CliTest(unittest.TestCase):
         proc.stdout.decode("utf-8")
 
 
+class AdversarialTest(unittest.TestCase):
+    """2026-11-21 對抗覆核（REVIEW.md M1–M7）。"""
+
+    def setUp(self):
+        self.m = MemoryDir()
+        self.addCleanup(self.m.close)
+
+    def run_check(self, **kw):
+        return c.check(self.m.root, **kw)
+
+    def test_pointers_inside_code_are_not_index_entries(self):
+        # M1：圍欄與行內程式碼裡的範例指標不算索引（不會誤報 broken-link，也不會讓檔「假裝有進索引」）。
+        self.m.write("a.md", fm("a"))
+        self.m.write("b.md", fm("b"))
+        self.m.index("a.md", extra="```\n- [ghost.md](ghost.md) — 範例\n- [b.md](b.md)\n```\n- 範例寫法 `[x.md](x.md)`")
+        findings, stats = self.run_check()
+        self.assertEqual([(f.code, f.file) for f in findings], [("unindexed", "b.md")])
+        self.assertEqual(stats["index_entries"], 1)
+
+    def test_duplicate_frontmatter_keys_warn(self):
+        # M2：重複鍵只有最後一個生效，載入端可能讀到另一個值。
+        self.m.write("a.md", "---\nname: a\ndescription: d\ntype: user\ntype: feedback\n---\n")
+        self.m.index("a.md")
+        findings, _ = self.run_check()
+        self.assertEqual([(f.code, f.level) for f in findings], [("duplicate-key", "WARN")])
+        self.assertIn("type", findings[0].msg)
+
+    def test_blank_quoted_values_are_missing(self):
+        # M3：引號包住的空白不是值。
+        self.m.write("a.md", '---\nname: a\ndescription: "   "\ntype: user\n---\n')
+        self.m.index("a.md")
+        findings, _ = self.run_check()
+        self.assertEqual(codes(findings, "ERROR"), ["no-frontmatter"])
+        self.assertIn("description", findings[0].msg)
+
+    def test_nested_type_only_counts_under_metadata(self):
+        # M4：規範只認頂層或 metadata: 底下的 type；別的鍵底下的 type 不算。
+        self.m.write("a.md", "---\nname: a\ndescription: d\ntags:\n  type: user\n---\n")
+        self.m.write("b.md", "---\nname: b\ndescription: d\nmetadata:\n  owner: x\n  type: user\n---\n")
+        self.m.index("a.md", "b.md")
+        findings, _ = self.run_check()
+        self.assertEqual([(f.code, f.file) for f in findings], [("no-frontmatter", "a.md")])
+
+    def test_code_masking_pairs_fences_and_backtick_runs(self):
+        # M5：~~~ 不能關掉 ``` 圍欄；雙反引號的行內程式碼也要遮掉。
+        self.m.write("a.md", fm("a", body="``[[ghost1]]``\n```\n~~~\n[[ghost2]]\n```\n[[ghost3]]"))
+        self.m.index("a.md")
+        findings, _ = self.run_check()
+        self.assertEqual([f.msg.split()[0] for f in findings], ["[[ghost3]]"])
+
+    def test_many_files_and_bracket_runs_stay_fast(self):
+        # M6：每個指標都重列一次資料夾是平方時間；一行大量 [ 也不可退化。
+        # 開檔時間受防毒掃描影響，所以資料夾列舉改數呼叫次數，不量時間。
+        import time
+        from unittest import mock
+        for i in range(60):
+            self.m.write(f"m{i}.md", fm(f"m{i}"))
+        self.m.write("sub/x.md", fm("x"))
+        self.m.index(*[f"m{i}.md" for i in range(60)], "sub/x.md")
+        real_iterdir = Path.iterdir
+        calls = []
+
+        def counting(path):
+            calls.append(path)
+            return real_iterdir(path)
+
+        with mock.patch.object(Path, "iterdir", counting):
+            findings, stats = self.run_check(max_entries=5000)
+        self.assertEqual(codes(findings), [])
+        self.assertEqual(stats["index_entries"], 61)
+        self.assertLessEqual(len(calls), 3)  # 頂層一次、索引用的頂層與 sub 各一次
+        self.m.write("MEMORY.md", "- " + "[" * 50000 + "\n")
+        started = time.perf_counter()
+        c.check(self.m.root, ignore=["m*.md"])
+        self.assertLess(time.perf_counter() - started, 3.0)
+
+    def test_os_errors_exit_2(self):
+        # M7：權限錯誤之類的 OSError 是「量不了」，結束碼 2，不是 traceback 的 1。
+        self.m.write("a.md", fm("a"))
+        self.m.index("a.md")
+        from unittest import mock
+        with mock.patch.object(c, "check", side_effect=PermissionError(13, "denied")), \
+                mock.patch("sys.stderr", new_callable=__import__("io").StringIO) as err:
+            self.assertEqual(c.main([str(self.m.root)]), 2)
+        self.assertIn("denied", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

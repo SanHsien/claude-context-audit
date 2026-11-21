@@ -50,8 +50,11 @@ ERROR 一定讓結束碼為 1；WARN 預設只提醒，加 `--strict` 才失敗�
 | WARN | `name-mismatch` | frontmatter 的 `name` 與檔名（去掉 `.md`）不同 |
 | WARN | `unknown-type` | `type` 不在 `--types` 清單 |
 | WARN | `dead-wikilink` | `[[name]]` 指向不存在的記憶；圍欄程式碼區塊與行內程式碼內的不算 |
+| WARN | `duplicate-key` | frontmatter 同一個頂層鍵出現多次（工具取最後一個，載入端不一定一樣） |
 
-`INDEX-*.md` 本身不要求 frontmatter。`http://` 之類帶 scheme 的連結與 `#` 開頭的錨點不當成索引指標。
+`INDEX-*.md` 本身不要求 frontmatter。索引檔裡圍欄程式碼區塊與行內程式碼內的連結不算指標，範例不會被誤報 `broken-link`，也不會讓檔案「假裝有進索引」。圍欄只被同字元、長度不短於開頭的行關閉（`~~~` 關不掉 `` ``` ``），行內程式碼以長度相同的反引號配對（雙反引號也算）。
+
+frontmatter 欄位值去掉引號後再去空白，`description: "   "` 算缺欄位。`type` 只認頂層或 `metadata:` 底下的 `type:`，其他鍵底下的 `type:` 不算。`http://` 之類帶 scheme 的連結與 `#` 開頭的錨點不當成索引指標。
 
 ## 4. 門檻
 
@@ -71,7 +74,7 @@ ERROR 一定讓結束碼為 1；WARN 預設只提醒，加 `--strict` 才失敗�
 | :--- | :--- |
 | 0 | 沒有 ERROR（加 `--strict` 時也沒有 WARN） |
 | 1 | 有 ERROR，或 `--strict` 且有 WARN |
-| 2 | 參數錯誤或資料夾不存在（錯誤訊息印在標準錯誤） |
+| 2 | 參數錯誤、資料夾不存在，或讀取時發生 OSError（例如權限不足）；錯誤訊息印在標準錯誤 |
 
 預設輸出每個發現一行，最後一行是摘要。`--json` 改輸出 `stats`（`index_entries`、`sub_index_entries`、`memory_files`）、`errors`、`warnings`、`by_code` 與 `findings` 陣列。
 
@@ -104,4 +107,7 @@ WARN  dead-wikilink  user-a.md:6  [[nope]] 沒有對應的記憶檔
 - 只檢查結構與連結，不判斷記憶**內容**是否過時、重複或互相矛盾。
 - `dead-wikilink` 只處理 `[[name]]`、`[[name|別名]]`、`[[name#段落]]` 三種寫法，目標只與頂層檔名及索引內的子路徑比對。
 - 只認 `- ` 或 `* ` 開頭的條列行為索引行；其他格式的連結不會被當成指標。
-- 不檢查 frontmatter 欄位值的語意（`description` 只要非空即可）。
+- 不檢查 frontmatter 欄位值的語意（`description` 只要非空即可）。frontmatter 不是完整 YAML 解析：`description: |` 之類的區塊字串只看到 `|`，值後面的 `# 註解` 會被當成值的一部分。
+- `[[wikilink]]` 不跟隨，所以循環連結不會造成無限迴圈，也不會被報出來。
+- 指標目的地含空白（`<my file.md>`）、括號或百分比編碼時會被報成 `broken-link`。
+- 每個資料夾只列一次檔名；開檔成本受防毒軟體影響，數千個檔時主要時間花在逐檔讀 frontmatter。

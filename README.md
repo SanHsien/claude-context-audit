@@ -17,9 +17,9 @@ transcript (JSONL) ──┬─> audit_agent_tool_pruning ──────> �
 | 指令 | 用途 | 結束碼 |
 |------|------|--------|
 | `python tools/audit_agent_tool_pruning.py S1.jsonl S2.jsonl --catalog catalog.json` | 統計工具呼叫頻率，找出整批 transcript 都沒用過的工具，建議加進 `permissions.deny` | 0 完成（含沒有建議）；2 輸入或參數有問題 |
-| `python tools/audit_session_memory_compression.py --transcript T.jsonl --memory M.md` | 檢查 session 壓縮成記憶後，關鍵事實與決策因果有沒有遺失 | 0 PASS；1 FAIL；2 輸入或參數有問題 |
+| `python tools/audit_session_memory_compression.py --transcript T.jsonl --memory M.md` | 檢查 session 壓縮成記憶後，關鍵事實與決策因果有沒有遺失 | 0 PASS；1 FAIL；2 輸入或參數有問題（含 `--output` 指向輸入檔） |
 | `python tools/verify_session_token_sentinel.py <check\|simulate\|classify\|title\|cost\|hook> ...` | 長對話 token 哨兵：量測、模擬、判定，以及可直接當 UserPromptSubmit hook 的 `hook` 子命令 | 0 通過；1 驗證失敗或量不到（`hook` 絕不回 2）；2 其他子命令的參數錯誤 |
-| `python tools/check_memory_index.py <記憶資料夾>` | 檢查 `MEMORY.md` 及其指向的 `INDEX-*.md` 子索引與實際記憶檔是否一致 | 0 通過；1 有 ERROR（加 `--strict` 則 WARN 也算）；2 參數或資料夾錯誤 |
+| `python tools/check_memory_index.py <記憶資料夾>` | 檢查 `MEMORY.md` 及其指向的 `INDEX-*.md` 子索引與實際記憶檔是否一致 | 0 通過；1 有 ERROR（加 `--strict` 則 WARN 也算）；2 參數或資料夾錯誤、讀取時 OSError |
 
 各工具的完整選項看 `--help`；判定語意與取捨寫在檔頭與對應文件：
 
@@ -29,6 +29,8 @@ transcript (JSONL) ──┬─> audit_agent_tool_pruning ──────> �
 | `audit_session_memory_compression` | [`docs/claude-code-cross-session-memory-evaluation-guide.md`](docs/claude-code-cross-session-memory-evaluation-guide.md)、[`templates/cross-session-memory-curation-spec.md`](templates/cross-session-memory-curation-spec.md)、[筆記](notes/2026-10-31-claude-code-cross-session-memory-claudemem-vs-claudemd.md) |
 | `verify_session_token_sentinel` | [`docs/long-chat-session-handoff-spec.md`](docs/long-chat-session-handoff-spec.md)、[`templates/session-handoff-brief-prompt.md`](templates/session-handoff-brief-prompt.md)、[筆記](notes/2026-11-02-littlehole-claude-saver-long-chat-session-handoff.md) |
 | `check_memory_index` | [`docs/memory-index-check-spec.md`](docs/memory-index-check-spec.md)；對應筆記留在 ai-inbox：[`notes/2026-10-26-ai-shared-memory-template-team-collaboration.md`](https://github.com/SanHsien/ai-inbox/blob/main/notes/2026-10-26-ai-shared-memory-template-team-collaboration.md) |
+
+已知能力邊界與 2026-11-21 獨立覆核的發現見 [`REVIEW.md`](REVIEW.md)。
 
 ## 快速開始
 

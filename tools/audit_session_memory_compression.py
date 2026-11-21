@@ -21,8 +21,9 @@ tools/audit_session_memory_compression.py
         test_conclusions  測試結論（Ran N tests、N passed／failed／skipped、FAILED (...)、單獨一行 OK、N 個測試通過／失敗）
         decisions         含原因或取捨標記的句子（因為／改用／決定／because／instead of ...），只取一般文字訊息，不取工具輸出
     保留 = 記憶（去掉 HTML 註解後）以同一套規則抽得同一個事實；decisions 改用詞元重疊：
-        該句在每個原因／決定標記處切成幾段，記憶中同一行或同一段對『每一段』詞元的涵蓋率都 >= --decision-overlap，
-        且該行／段本身也含原因標記（所以只留做法、丟掉原因，會算損失）
+        該句在每個原因／決定標記處切成幾段，記憶中同一行或同一個條列項目（含續行）對標記後『每一段』詞元的涵蓋率都
+        >= --decision-overlap，且該行／項目本身也含原因標記（所以只留做法、丟掉原因，會算損失；原因放在另一個條目也算損失）；
+        第一個標記之前的背景段可由所在的空行段落涵蓋
     資訊損失率 = 1 - 保留事實數 / 事實總數（總體，各類別另列；某類別沒有事實時該類別為 null，不拿 0 充數）
     unsupported = 記憶抽得、但 transcript 抽不到的路徑／錯誤代碼／測試結論（壓縮把事實改錯或憑空出現）
 
@@ -139,7 +140,9 @@ def load_transcript(path: Path) -> list[tuple[str, str]]:
     raw = read_text_file(path, "transcript")
     segments: list[tuple[str, str]] = []
     records = 0
-    for lineno, line in enumerate(raw.splitlines(), 1):
+    # 只在 \n 切行：splitlines() 也會在 U+2028／U+2029／U+0085 等字元切開，
+    # 而 JSON.stringify 不跳脫這些字元，它們出現在 JSON 字串裡是合法的。
+    for lineno, line in enumerate(raw.split("\n"), 1):
         if not line.strip():
             continue
         try:
@@ -265,36 +268,75 @@ def strip_comments(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text, flags=re.S)
 
 
-def memory_units(text: str) -> list[str]:
+_BLOCK_START = re.compile(r"^(?:[-*+][ \t]|\d{1,9}[.)][ \t]|#{1,6}[ \t]|>)")
+
+
+def memory_units(text: str) -> list[tuple[str, str]]:
+    """回傳 (細單位, 它所在的空行段落)。
+
+    細單位 = 每一行，加上每個條列項目（含續行）與每段非條列文字；遇空行、條列、標題、引用開頭就切開。
+    沒有空行的條列清單若整份算一個單位，做法與原因分散在不同條目也會被當成保留因果（假綠）。
+    空行段落只用來涵蓋決策句「第一個標記之前」的背景段（例如錯誤出在哪個檔）。"""
     lines = [ln.strip() for ln in text.split("\n")]
-    units = [ln for ln in lines if ln]
-    paras, cur = [], []
+    out: list[tuple[str, str]] = []
+    para_lines: list[str] = []
     for ln in lines + [""]:
         if ln:
-            cur.append(ln)
-        elif cur:
-            paras.append(" ".join(cur))
-            cur = []
-    return units + paras
-
-
-def sentence_segments(sentence: str) -> list[set[str]]:
-    """把決策句在每個原因／決定標記處切開，回傳各段詞元（至少 2 個詞元的段才算）。
-
-    記憶必須在『同一行或同一段』裡同時涵蓋每一段，所以只留「改用 X」而丟掉「因為 Y」會被算成損失。
-    切不出符合條件的段時，退回整句。"""
-    segs = [t for t in (tokens(part) for part in _DECISION_MARK.split(sentence)) if len(t) >= 2]
-    return segs or [tokens(sentence)]
-
-
-def best_overlap(sentence: str, units: list[str]) -> float:
-    segs = sentence_segments(sentence)
-    best = 0.0
-    for u in units:
-        if not _DECISION_MARK.search(u):
+            para_lines.append(ln)
             continue
-        ut = tokens(u)
-        best = max(best, min(len(seg & ut) / len(seg) for seg in segs))
+        if not para_lines:
+            continue
+        coarse = " ".join(para_lines)
+        blocks, cur = [], []
+        for pl in para_lines:
+            if cur and _BLOCK_START.match(pl):
+                blocks.append(" ".join(cur))
+                cur = []
+            cur.append(pl)
+        blocks.append(" ".join(cur))
+        for fine in dict.fromkeys(para_lines + blocks):
+            out.append((fine, coarse))
+        para_lines = []
+    return out
+
+
+def sentence_segments(sentence: str) -> tuple[set[str] | None, list[set[str]]]:
+    """把決策句在每個原因／決定標記處切開，回傳 (背景段, 其餘各段) 的詞元（至少 2 個詞元的段才算）。
+
+    背景段 = 第一個標記之前的文字；其餘各段（原因、做法）必須在『同一個細單位』裡同時涵蓋，
+    所以只留「改用 X」而丟掉「因為 Y」會被算成損失。切不出符合條件的段時，退回整句。"""
+    parts = _DECISION_MARK.split(sentence)
+    lead = tokens(parts[0])
+    rest = [t for t in (tokens(part) for part in parts[1:]) if len(t) >= 2]
+    if len(lead) >= 2 and rest:
+        return lead, rest
+    segs = ([lead] if len(lead) >= 2 else []) + rest
+    return None, segs or [tokens(sentence)]
+
+
+def unit_token_sets(units: list[tuple[str, str]]) -> list[tuple[set[str], set[str]]]:
+    """只留含原因／決定標記的細單位，並先切好詞元；每個決策句都重切會變成 D×U 次切詞。"""
+    coarse_cache: dict[str, set[str]] = {}
+    out = []
+    for fine, coarse in units:
+        if _DECISION_MARK.search(fine):
+            if coarse not in coarse_cache:
+                coarse_cache[coarse] = tokens(coarse)
+            out.append((tokens(fine), coarse_cache[coarse]))
+    return out
+
+
+def best_overlap(sentence: str, units: list[tuple[str, str]],
+                 unit_tokens: list[tuple[set[str], set[str]]] | None = None) -> float:
+    lead, segs = sentence_segments(sentence)
+    best = 0.0
+    for fine, coarse in unit_tokens if unit_tokens is not None else unit_token_sets(units):
+        score = min(len(seg & fine) / len(seg) for seg in segs)
+        if lead is not None:
+            score = min(score, len(lead & coarse) / len(lead))
+        best = max(best, score)
+        if best >= 1.0:
+            break
     return best
 
 
@@ -348,12 +390,13 @@ def audit(
 
     m_paths, m_errors, m_tests = extract_paths(memory), extract_errors(memory), extract_tests(memory)
     units = memory_units(memory)
+    unit_tokens = unit_token_sets(units)
 
     lost: dict[str, list[str]] = {
         "paths": sorted(t_paths - m_paths),
         "error_codes": sorted(t_errors - m_errors),
         "test_conclusions": sorted(t_tests - m_tests),
-        "decisions": [s for s in t_dec if best_overlap(s, units) < decision_overlap],
+        "decisions": [s for s in t_dec if best_overlap(s, units, unit_tokens) < decision_overlap],
     }
     totals = {"paths": len(t_paths), "error_codes": len(t_errors), "test_conclusions": len(t_tests), "decisions": len(t_dec)}
     cats = {}
@@ -379,8 +422,9 @@ def audit(
     total_lost = sum(len(v) for v in lost.values())
     overall = total_lost / total_facts
 
+    all_text_norm = norm_path(all_text)  # 算一次；放在產生式裡會每個記憶路徑重算整份 transcript
     unsupported = {
-        "paths": sorted(p for p in m_paths if p not in t_paths and p not in norm_path(all_text)),
+        "paths": sorted(p for p in m_paths if p not in t_paths and p not in all_text_norm),
         "error_codes": sorted(m_errors - t_errors),
         "test_conclusions": sorted(m_tests - t_tests),
     }
@@ -536,6 +580,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     _utf8_stdio()
     args = build_parser().parse_args(argv)
+    if args.output:
+        out_path = Path(args.output).resolve()
+        if out_path in (Path(args.transcript).resolve(), Path(args.memory).resolve()):
+            print(f"錯誤：--output 不可指向輸入檔（會蓋掉輸入）：{args.output}", file=sys.stderr)
+            return 2
     try:
         segments = load_transcript(Path(args.transcript))
         memory_raw = read_text_file(Path(args.memory), "記憶檔")

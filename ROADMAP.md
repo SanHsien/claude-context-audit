@@ -5,7 +5,7 @@
 
 ## 現況
 
-從 ai-inbox 以 git-filter-repo 拆出的 Claude Code 脈絡稽核工具集（public，純 Python 標準庫，無第三方依賴）。本機 `python -m unittest discover -s tests` 共 208 項測試（2026-11-08 本機以 Python 3.11.15 與 3.14.10 各跑一次，皆 `Ran 208 tests ... OK`）；CI（`.github/workflows/ci.yml`）在 windows-latest 與 ubuntu-latest 以 Python 3.11 與 3.14 矩陣執行；`2eaaa1c` 的 CI 四個 job（兩個 OS × Python 3.11／3.14）都 success（2026-11-08 `gh run list` 查）。獨立後歷史已壓縮成單一 commit（2026-11-03，維護者決定），拆出前的歷史留在 ai-inbox。各工具的預設門檻多為作者取捨或借自外部專案，尚未在本 repo 量測。
+從 ai-inbox 以 git-filter-repo 拆出的 Claude Code 脈絡稽核工具集（public，純 Python 標準庫，無第三方依賴）。本機 `python -m unittest discover -s tests` 共 208 項測試（2026-11-08 本機以 Python 3.11.15 與 3.14.10 各跑一次，皆 `Ran 208 tests ... OK`）；CI（`.github/workflows/ci.yml`）在 windows-latest 與 ubuntu-latest 以 Python 3.11 與 3.14 矩陣執行；`2eaaa1c` 的 CI 四個 job（兩個 OS × Python 3.11／3.14）都 success（2026-11-08 `gh run list` 查）。獨立後歷史已壓縮成單一 commit（2026-11-03，維護者決定），拆出前的歷史留在 ai-inbox。各工具的預設門檻多為作者取捨或借自外部專案，尚未在本 repo 量測。2026-11-21 完成第一次獨立對抗覆核，測試增為 225 項，發現與修復紀錄見 [`REVIEW.md`](REVIEW.md)。
 
 ## 近期：可以直接動手
 

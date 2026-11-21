@@ -281,6 +281,8 @@ python tools/audit_agent_tool_pruning.py S*.jsonl --catalog catalog.json --deny-
 - Claude Code 對「中途新增 deny」的實際行為（第 5.4 節）：兩份來源描述不同層面，未自行驗證。
 - 本工具的 token 占比用「輸入 JSON 字元數 ÷ 4」估算（`chars_per_token`＝4，啟發式，本 repo 取捨），只反映呼叫輸入，不含工具回傳內容，也不是計費 token。
 - 子 agent 檔只認 `<主檔名>/subagents/*.jsonl` 這個上游慣例路徑；放在別處的不會被併入。
+- 重複輸入會灌水證據：同一路徑、已自動併入的子 agent 檔，以及位元組完全相同的副本都會被拒絕（結束碼 2）；內容只差一點的副本（例如複製後又續寫）偵測不到。
+- transcript 只在 `\n` 切行：JSON 字串裡未跳脫的 U+2028／U+2029／U+0085 是合法內容，不會被當成換行。
 - 論文與外掛都是 2026-10 的新資料，repo 持續更新；以上以固定 commit 為準。
 
 ## 9. 來源
